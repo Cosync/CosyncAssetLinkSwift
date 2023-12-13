@@ -384,7 +384,7 @@ public class CSUploadManager: NSObject, URLSessionTaskDelegate {
             assetArgs.writeUrls?.writeUrlVideoPreview = uploadResult.writeUrls?.writeUrlVideoPreview ?? ""
             assetArgs.contentId = uploadResult.contentId!
             
-            assetArgs.expirationHours = item.expirationHours == 0 ? 24 : item.expirationHours
+            assetArgs.expirationHours = item.expirationHours
             assetArgs.noCuts = item.noCut
         }
         else {
