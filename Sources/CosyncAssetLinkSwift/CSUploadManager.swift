@@ -149,7 +149,7 @@ public struct CSAssetUpload {
     public var filePath: String = ""
     public var contentId: Int = 0
     public var contentType: String = ""
-    public var expirationHours: Double = 24.0
+    public var expirationHours: Double = 168.0
     public var size: Int = 0
     public var duration: Double = 0.0
     public var color: String = "#000000"
@@ -318,6 +318,7 @@ public class CSUploadManager: NSObject, URLSessionTaskDelegate {
     private func createAssetArgs(item: CSUploadItem) async throws -> CSAssetUpload {
         
         var assetArgs = CSAssetUpload()
+        assetArgs.expirationHours = item.expirationHours
         
         if (item.mediaType == .image) {
             let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: [item.url.absoluteString], options: nil)
@@ -384,7 +385,6 @@ public class CSUploadManager: NSObject, URLSessionTaskDelegate {
             assetArgs.writeUrls?.writeUrlVideoPreview = uploadResult.writeUrls?.writeUrlVideoPreview ?? ""
             assetArgs.contentId = uploadResult.contentId!
             
-            assetArgs.expirationHours = item.expirationHours
             assetArgs.noCuts = item.noCut
         }
         else {
