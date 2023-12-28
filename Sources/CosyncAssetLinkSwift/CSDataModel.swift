@@ -53,6 +53,26 @@ public class CosyncAsset: Object, Codable, ObjectKeyIdentifiable {
 }
 
 @available(macOS 10.15, *)
+public struct CSRefreshAssetResult: Codable {
+     
+    public var _id: String = ""
+    public var userId: String = ""
+    public var expirationHours: Double = 0.0
+    public var contentType: String
+    public var size: Int?
+    public var expiration: Date?
+    public var caption: String?
+    public var url: String?
+    public var urlSmall: String?
+    public var urlMedium: String?
+    public var urlLarge: String?
+    public var urlVideoPreview: String?
+    public var status: String = "active"
+    public var createdAt: Date?
+    public var updatedAt: Date?
+}
+
+@available(macOS 10.15, *)
 // Urls from CosyncInitAsset
 public struct CSWriteUrls: Codable {
     public var writeUrl:String = ""

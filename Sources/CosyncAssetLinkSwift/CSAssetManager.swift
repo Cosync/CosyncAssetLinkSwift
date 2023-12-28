@@ -42,16 +42,54 @@ public class CSAssetManager: NSObject {
         self.realm = realm
     }
     
+    
+    // This function will return an option array of CSRefreshAssetResult
+    // You can request multiple asset at once by using comma separator in assetId eg: assetId1,assetId2
+    @MainActor
+    public func refreshAsset(assetId: String) async throws -> [CSRefreshAssetResult]? {
+        
+        var assetResult = [CSRefreshAssetResult]()
+   
+        let result = try await self.app.currentUser!.functions.CosyncRefreshAsset([AnyBSON(assetId)])
+        
+        if result == false{
+            return nil
+        }
+        
+        let decoder = JSONDecoder()
+        let dateFormatter = DateFormatter()
+        //ISO8601 UTC
+        dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSXXXXX"
+        decoder.dateDecodingStrategy = .formatted(dateFormatter)
+        decoder.dataDecodingStrategy = .base64
+        
+        do {
+            if let stringValue = result.stringValue {
+                assetResult = try decoder.decode([CSRefreshAssetResult].self, from: Data(stringValue.utf8))
+            }
+        } catch {
+            print("refreshAsset error \(error.localizedDescription)")
+            return nil
+        }
+        
+        return assetResult
+    }
+    
+    
+    // This function will return Realm result of CosyncAsset that belong to the requested user
     @MainActor
     public func getUserAssets(userId: String) async throws -> Results<CosyncAsset> {
         return realm!.objects(CosyncAsset.self).filter("userId = '\(userId)'")
     }
     
+    // This function will return Realm result of CosyncAsset
     @MainActor
     public func getAssets(assetIds: [ObjectId]) async throws -> Results<CosyncAsset> {
         return realm!.objects(CosyncAsset.self).filter("_id IN  %@", assetIds)
     }
     
+    
+    // This function will update a status of CosyncAsset
     @MainActor
     public func updateAssetStatus(assetId: ObjectId, status:String) async throws {
         if let asset = realm!.objects(CosyncAsset.self).filter("_id = %@", assetId).first {
@@ -62,6 +100,7 @@ public class CSAssetManager: NSObject {
         }
     }
     
+    // This function will delete a CosyncAsset
     @MainActor
     public func deleteAssets(assetIds: [ObjectId]) async throws {
         let assets = realm!.objects(CosyncAsset.self).filter("_id IN  %@", assetIds)
@@ -71,12 +110,21 @@ public class CSAssetManager: NSObject {
         
     }
     
+    // This function will update status to 'deleted' for all CosyncAsset that belong to the reqeusted user
+    // The server will handle the assets deletion
     @MainActor
     public func deleteUserAssets(userId: String) async throws {
         let assets = realm!.objects(CosyncAsset.self).filter("userId = '\(userId)'")
         try! realm!.write {
-            realm.delete(assets)
+            assets.setValue("deleted", forKey: "status")
         }
+    }
+    
+    
+    // This function will return an amount total storage usage in bytes of the reqeusted user
+    @MainActor
+    public func getUserStorageUsed(userId: String) async throws -> Int {
+        return try await self.app.currentUser!.functions.CosyncCountUserS3Directory([AnyBSON("")]).asInt() ?? 0
     }
     
     
