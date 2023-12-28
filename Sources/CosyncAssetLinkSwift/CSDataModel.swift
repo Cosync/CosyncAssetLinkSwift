@@ -28,7 +28,7 @@ import RealmSwift
 
 @available(macOS 10.15, *)
 // Cosync asset Realm object
-public class CosyncAsset: Object, Codable {
+public class CosyncAsset: Object, Codable, ObjectKeyIdentifiable {
     @Persisted(primaryKey: true) public var _id: ObjectId
     @Persisted(indexed: true) public var userId: String = ""
     @Persisted public var path: String = ""
