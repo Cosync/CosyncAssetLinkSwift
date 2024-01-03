@@ -104,6 +104,9 @@ public struct CSUploadItem {
     // asset results.
     var tag: String = ""
     
+    // asset caption text
+    var caption: String = ""
+    
     // URL to local resource
     var url: URL
     
@@ -133,11 +136,12 @@ public struct CSUploadItem {
     // Time for which a read/write URL will be valid.
     var expirationHours: Double = 168.0
     
-    public init(tag: String, url: URL, mediaType: CSUploadItem.MediaType, expiration: Double) {
+    public init(tag: String, url: URL, mediaType: CSUploadItem.MediaType, expiration: Double, caption:String = "") {
         self.tag = tag
         self.url = url
         self.mediaType = mediaType
         self.expirationHours = expiration
+        self.caption = caption
     }
 }
 
@@ -319,6 +323,7 @@ public class CSUploadManager: NSObject, URLSessionTaskDelegate {
         
         var assetArgs = CSAssetUpload()
         assetArgs.expirationHours = item.expirationHours
+        assetArgs.caption = item.caption
         
         if (item.mediaType == .image) {
             let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: [item.url.absoluteString], options: nil)
