@@ -48,6 +48,7 @@ public class CosyncAsset: Object, Codable, ObjectKeyIdentifiable {
     @Persisted public var urlLarge: String?
     @Persisted public var urlVideoPreview: String?
     @Persisted public var status: String = "active"
+    @Persisted public var refCount: Int = 1
     @Persisted public var createdAt: Date?
     @Persisted public var updatedAt: Date?
 }
