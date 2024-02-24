@@ -88,6 +88,17 @@ public class CSAssetManager: NSObject {
         return realm!.objects(CosyncAsset.self).filter("_id IN  %@", assetIds)
     }
     
+    // This function will update a refCount of CosyncAsset suplush or deduct
+    @MainActor
+    public func updateAssetRefCount(assetId: ObjectId, amount:Int) async throws {
+        if let asset = realm!.objects(CosyncAsset.self).filter("_id = %@", assetId).first {
+            try! realm!.write {
+                asset.refCount += amount
+                asset.updatedAt = Date()
+            }
+        }
+    }
+    
     
     // This function will update a status of CosyncAsset
     @MainActor
