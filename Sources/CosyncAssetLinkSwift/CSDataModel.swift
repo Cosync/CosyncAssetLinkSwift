@@ -36,6 +36,7 @@ public class CosyncAsset: Object, Codable, ObjectKeyIdentifiable {
     @Persisted public var expirationHours: Double = 24.0
     @Persisted public var contentType: String?
     @Persisted public var size: Int?
+    @Persisted public var storageSize: Int?
     @Persisted public var duration: Double?
     @Persisted public var expiration: Date?
     @Persisted public var color: String = "#000000"

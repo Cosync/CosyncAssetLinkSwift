@@ -136,12 +136,21 @@ public struct CSUploadItem {
     // Time for which a read/write URL will be valid.
     var expirationHours: Double = 168.0
     
-    public init(tag: String, url: URL, mediaType: CSUploadItem.MediaType, expiration: Double, caption:String = "") {
+    // image data
+    var uiImage:UIImage?
+    var contentType:String?
+    var size:Int?
+    
+    public init(tag: String, url: URL, mediaType: CSUploadItem.MediaType, expiration: Double, caption:String = "", uiImage:UIImage? = nil, contentType:String = "", size:Int? = 0, noCut:Bool? = false) {
         self.tag = tag
         self.url = url
         self.mediaType = mediaType
         self.expirationHours = expiration
         self.caption = caption
+        self.uiImage = uiImage
+        self.contentType = contentType
+        self.size = size
+        self.noCut = noCut ?? false
     }
 }
 
@@ -155,6 +164,7 @@ public struct CSAssetUpload {
     public var contentType: String = ""
     public var expirationHours: Double = 168.0
     public var size: Int = 0
+    public var storageSize:Int? = 0
     public var duration: Double = 0.0
     public var color: String = "#000000"
     public var xRes: Int = 0
@@ -172,6 +182,7 @@ public struct CSAssetUpload {
     public var index = 0
     public var uploadSessionCount = 0
     public var tag: String = ""
+    public var uiImage:UIImage? = nil
 }
 
 // Upload states that are used to communicate upload
@@ -324,8 +335,14 @@ public class CSUploadManager: NSObject, URLSessionTaskDelegate {
         var assetArgs = CSAssetUpload()
         assetArgs.expirationHours = item.expirationHours
         assetArgs.caption = item.caption
-        
+     
         if (item.mediaType == .image) {
+            if let image = item.uiImage {
+                assetArgs.uiImage = image
+                assetArgs.color = image.averageColor()
+            }
+            assetArgs.size = item.size ?? 0
+            
             let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: [item.url.absoluteString], options: nil)
             fetchResult.enumerateObjects { object, index, stop in
                 let phAsset = object as PHAsset
@@ -338,31 +355,21 @@ public class CSUploadManager: NSObject, URLSessionTaskDelegate {
                     phOptions.resizeMode = PHImageRequestOptionsResizeMode.exact
                     phOptions.isSynchronous = true;
                     let fileName = file.originalFilename.filter({$0 != " "})
-
-                    imageManager.requestImage(for: phAsset,
-                                              targetSize: CGSize(width: phAsset.pixelWidth, height: phAsset.pixelHeight),
-                                              contentMode: .aspectFit,
-                                              options: phOptions,
-                                              resultHandler: { image, _ in
-                        
-                        if  let image = image {
-                            let fileSize = file.value(forKey: "fileSize") as? Int
-                            assetArgs.extra = phAsset.localIdentifier
-                            assetArgs.size = fileSize! + (item.noCut ? 0 : 1000 )
-                            assetArgs.color = image.averageColor()
-                            assetArgs.xRes = phAsset.pixelWidth
-                            assetArgs.yRes = phAsset.pixelHeight
-                            assetArgs.filePath = item.path + "/" + fileName
-                            assetArgs.contentType = fileName.mimeType()
-                        }
-                    })
+                    
+                    assetArgs.extra = phAsset.localIdentifier
+                    assetArgs.xRes = phAsset.pixelWidth
+                    assetArgs.yRes = phAsset.pixelHeight
+                    assetArgs.filePath = item.path + "/" + fileName
+                    assetArgs.contentType = fileName.mimeType()
+                    
                 }
             }
         }
         else {
+           
             let attr = try FileManager.default.attributesOfItem(atPath: item.url.path)
             let dict = attr as NSDictionary
-            assetArgs.size = Int(dict.fileSize()) +  (item.noCut ? 0 : 1000)
+            assetArgs.size =  Int(dict.fileSize())
             assetArgs.extra = item.url.lastPathComponent
             assetArgs.filePath = item.path + "/" + item.url.lastPathComponent.filter({$0 != " "})
             assetArgs.contentType = item.url.mimeType()
@@ -423,15 +430,16 @@ public class CSUploadManager: NSObject, URLSessionTaskDelegate {
         let largeCutSize = assetToUpload.smallCutSize
         let videoPreviewURL = assetToUpload.writeUrls!.writeUrlVideoPreview
         let noCuts = assetToUpload.noCuts
+        var storageSize = assetToUpload.size
         
         csLogger.info("start upload asset")
         if (contentType.contains("image")) {
             
-            try await uploadImage(session: session, filename: filename, writeURL: writeURL, contentType: contentType, writeURLSmall: writeSmallURL, writeURLMedium: writeMediumURL, writeURLLarge: writeLargeURL, smallCutSize: smallCutSize, mediumCutSize: mediumCutSize, largeCutSize: largeCutSize, noCuts:noCuts)
+            storageSize = try await uploadImage(session: session, filename:  filename, image: assetToUpload.uiImage, writeURL: writeURL, contentType: contentType, writeURLSmall: writeSmallURL, writeURLMedium: writeMediumURL, writeURLLarge: writeLargeURL, smallCutSize: smallCutSize, mediumCutSize: mediumCutSize, largeCutSize: largeCutSize, noCuts:noCuts)
         }
         else if (contentType.contains("video")){
             
-            try await uploadVideo(session: session, writeUrl: writeURL, writePreviewURL: videoPreviewURL, filename: filename, writeURLSmall: writeSmallURL, writeURLMedium: writeMediumURL, writeURLLarge: writeLargeURL, smallCutSize: smallCutSize, mediumCutSize: mediumCutSize, largeCutSize: largeCutSize, noCuts: noCuts)
+            storageSize += try await uploadVideo(session: session, writeUrl: writeURL, writePreviewURL: videoPreviewURL, filename: filename, writeURLSmall: writeSmallURL, writeURLMedium: writeMediumURL, writeURLLarge: writeLargeURL, smallCutSize: smallCutSize, mediumCutSize: mediumCutSize, largeCutSize: largeCutSize, noCuts: noCuts)
         }
         else {
             let fileUrl = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent(assetToUpload.extra)
@@ -440,14 +448,14 @@ public class CSUploadManager: NSObject, URLSessionTaskDelegate {
         
         session.csClearActive()
         
-        asset = try await self.saveAsset(assetToUpload)
+        asset = try await self.saveAsset(assetToUpload, storageSize )
         
         return asset
     }
     
     // Calls the server CosyncAssetCreate and commit the returned
     // CosyncAsset.
-    private func saveAsset(_ assetArgs: CSAssetUpload) async throws -> CosyncAsset {
+    private func saveAsset(_ assetArgs: CSAssetUpload, _ storageSize:Int) async throws -> CosyncAsset {
         
         var asset: CosyncAsset?
         let user = self.app.currentUser
@@ -458,6 +466,7 @@ public class CSUploadManager: NSObject, URLSessionTaskDelegate {
                                                 AnyBSON(assetArgs.contentType),
                                                 AnyBSON(assetArgs.expirationHours),
                                                 AnyBSON(assetArgs.size),
+                                                AnyBSON(storageSize),
                                                 AnyBSON(assetArgs.duration),
                                                 AnyBSON(assetArgs.color),
                                                 AnyBSON(assetArgs.xRes),
@@ -489,63 +498,86 @@ public class CSUploadManager: NSObject, URLSessionTaskDelegate {
     }
     
     public func uploadImage(session: URLSession,
-                            filename: String?,
-                            writeURL: String?,
-                            contentType: String?,
+                            filename: String,
+                            image:UIImage?,
+                            writeURL: String,
+                            contentType: String,
                             writeURLSmall: String?,
                             writeURLMedium: String?,
                             writeURLLarge: String?,
                             smallCutSize: Int?,
                             mediumCutSize: Int?,
                             largeCutSize: Int?,
-                            noCuts: Bool?) async throws {
+                            noCuts: Bool?) async throws -> Int {
         
         csLogger.info("\(#function) start upload image")
+        var storageSize = 0
+      
+        var imageToUpload:UIImage? = nil
         
-        if let uploadImage = await UIImage.getImageFromFile(fileName: filename!) {
-
-            var fullImageData: Data?
-            if contentType == "image/png" {
-                fullImageData = uploadImage.pngData()
+        
+        if let uiImage = image {
+            imageToUpload = uiImage
+        }
+        else if let uiImage = await UIImage.getImageFromFile(fileName: filename) {
+            imageToUpload = uiImage
+        }
+            
+            
+        if let imageToUpload = imageToUpload {
+            let imageData =  contentType == "image/png" ?  imageToUpload.pngData() : imageToUpload.jpegData(compressionQuality: 1.0)
+           
+            if let data = imageData {
+                storageSize = imageData?.count ?? 0
+                
+                try await self.uploadData(session: session, data: data, writeUrl: writeURL, mimeType: contentType)
+                
+                csLogger.info(" imageToUpload size = \(storageSize)")
+                
+                storageSize += try await self.uploadImageCuts(session: session, writeURLSmall: writeURLSmall, writeURLMedium: writeURLMedium, writeURLLarge: writeURLLarge, smallCutSize: smallCutSize, mediumCutSize: mediumCutSize, largeCutSize: largeCutSize, imageToCut: imageToUpload, mimeType: contentType, noCuts: noCuts)
+                
             }
-            else {
-                fullImageData = uploadImage.jpegData(compressionQuality: 1.0)
-            }
-            try await self.uploadData(session: session, data: fullImageData!, writeUrl: writeURL!, mimeType: contentType!)
-            try await self.uploadImageCuts(session: session, writeURLSmall: writeURLSmall, writeURLMedium: writeURLMedium, writeURLLarge: writeURLLarge, smallCutSize: smallCutSize, mediumCutSize: mediumCutSize, largeCutSize: largeCutSize, imageToCut: uploadImage, mimeType: contentType!, noCuts: noCuts)
         }
         
-        csLogger.info("end upload image")
+        csLogger.info("end upload image storageSize = \(storageSize)")
+        return storageSize
     }
     
     @MainActor
     private func uploadVideo(session: URLSession,
-                            writeUrl: String?,
+                            writeUrl: String,
                             writePreviewURL: String?,
-                            filename: String?,
+                            filename: String,
                             writeURLSmall: String?,
                             writeURLMedium: String?,
                             writeURLLarge: String?,
                             smallCutSize: Int?,
                             mediumCutSize: Int?,
                             largeCutSize: Int?,
-                            noCuts: Bool?) async throws {
+                            noCuts: Bool?) async throws -> Int{
         
         csLogger.info("start upload video")
-       
-        let fileUrl = FileManager.default.temporaryDirectory.appendingPathComponent(filename!)
+        var storageSize = 0
+        let fileUrl = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
           
-        try await self.uploadFile(session: session, writeUrl: writeUrl!, fileUrl: fileUrl)
-        let preview = fileUrl.generateVideoThumbnail()!
-        let fullImageData = preview.pngData()!
+        try await self.uploadFile(session: session, writeUrl: writeUrl, fileUrl: fileUrl)
         
-        try await self.uploadData(session: session, data: fullImageData, writeUrl: writePreviewURL!, mimeType: "image/png")
-        
-        try await self.uploadImageCuts(session: session, writeURLSmall: writeURLSmall, writeURLMedium: writeURLMedium, writeURLLarge: writeURLLarge, smallCutSize: smallCutSize, mediumCutSize: mediumCutSize, largeCutSize: largeCutSize, imageToCut: preview, mimeType: "image/png", noCuts: noCuts)
-       
-       
+        if let previewURL = writePreviewURL, let preview = fileUrl.generateVideoThumbnail(){
+            
+            let fullImageData = preview.pngData()!
+            
+            let imgData = NSData(data:fullImageData)
+            storageSize = imgData.count;
+            
+            try await self.uploadData(session: session, data: fullImageData, writeUrl: previewURL, mimeType: "image/png")
+            
+            storageSize += try await self.uploadImageCuts(session: session, writeURLSmall: writeURLSmall, writeURLMedium: writeURLMedium, writeURLLarge: writeURLLarge, smallCutSize: smallCutSize, mediumCutSize: mediumCutSize, largeCutSize: largeCutSize, imageToCut: preview, mimeType: "image/png", noCuts: noCuts)
+            
+        }
         try FileManager.default.removeItem(atPath: fileUrl.path) // remove local temp video file
         csLogger.info("end upload video")
+        
+        return storageSize
     }
     
     private func uploadImageCuts(session: URLSession,
@@ -557,12 +589,12 @@ public class CSUploadManager: NSObject, URLSessionTaskDelegate {
                                 largeCutSize: Int?,
                                 imageToCut: UIImage,
                                 mimeType: String,
-                                noCuts: Bool?) async throws {
+                                noCuts: Bool?) async throws -> Int{
         
         csLogger.info("start upload image cuts")
-        
+        var cutStorageSize = 0
         if (noCuts!) {
-            return
+            return cutStorageSize
         }
         
         if let writeUrlSmall = writeURLSmall,
@@ -573,21 +605,39 @@ public class CSUploadManager: NSObject, URLSessionTaskDelegate {
             let imageMedium = imageToCut.imageCut(cutSize: CGFloat(mediumCutSize!))
             let imageLarge =  imageToCut.imageCut(cutSize: CGFloat(largeCutSize!))
              
+             
             func fullImageData(_ image: UIImage) -> Data? {
                 return (mimeType == "image/png") ? image.pngData() : image.jpegData(compressionQuality: 1.0)
             }
             
-            csLogger.info("start upload small cut")
-            try await self.uploadData(session: session, data: fullImageData(imageSmall!)!, writeUrl: writeUrlSmall, mimeType: mimeType)
-           
-            csLogger.info("start upload medium cut")
-            try await self.uploadData(session: session, data: fullImageData(imageMedium!)!, writeUrl: writeUrlMedium, mimeType: mimeType)
-           
-            csLogger.info("start upload large cut")
-            try await self.uploadData(session: session, data: fullImageData(imageLarge!)!, writeUrl: writeUrlLarge, mimeType: mimeType)
+            
+            if let image = imageSmall, let smallData = fullImageData(image) {
+               
+                let imgData = NSData(data:smallData)
+                cutStorageSize += imgData.count
+                csLogger.info("start upload small cut = \(imgData.count)")
+                try await self.uploadData(session: session, data: smallData, writeUrl: writeUrlSmall, mimeType: mimeType)
+            }
+            
+            if let image = imageMedium, let mediumData = fullImageData(image) {
+               
+                let imgData = NSData(data:mediumData)
+                cutStorageSize += imgData.count
+                csLogger.info("start upload medium cut = \(imgData.count)")
+                try await self.uploadData(session: session, data: mediumData, writeUrl: writeUrlMedium, mimeType: mimeType)
+            }
+            
+            if let image = imageLarge, let largeData = fullImageData(image) {
+               
+                let imgData = NSData(data:largeData)
+                cutStorageSize += imgData.count
+                csLogger.info("start upload large cut = \(imgData.count)")
+                try await self.uploadData(session: session, data: largeData, writeUrl: writeUrlLarge, mimeType: mimeType)
+            }
         }
         
-        csLogger.info("end upload image cuts")
+        csLogger.info("end upload image cuts cutStorageSize = \(cutStorageSize)")
+        return cutStorageSize
     }
     
     private func uploadFile(session: URLSession, writeUrl: String, fileUrl: URL) async throws  {

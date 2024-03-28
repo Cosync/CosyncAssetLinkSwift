@@ -106,9 +106,9 @@ public struct AssetPicker: UIViewControllerRepresentable {
                         if fm.fileExists(atPath: destination.path) {
                             try fm.removeItem(at: destination)
                         }
-                        
+                       
                         try fm.copyItem(at: url, to: destination)
-                        result = AssetPickerResult(success: true, error: "", assetId: pickedAsset.assetIdentifier ?? "", assetType: "video", data: destination)
+                        result = AssetPickerResult(success: true, error: "", assetId: pickedAsset.assetIdentifier ?? "", assetType: filename.mimeType(), data: destination)
                         
                         self.onPicked(result)
                     }
@@ -133,8 +133,10 @@ public struct AssetPicker: UIViewControllerRepresentable {
                     if let err = error {
                         result.error  = err.localizedDescription
                     }
-                    else if let image = object as? UIImage {
-                        result = AssetPickerResult(success: true, error: "", assetId: pickedAsset.assetIdentifier ?? "", assetType: "image", data: image)
+                    else if let image = object as? UIImage, let assetId =  pickedAsset.assetIdentifier{
+                        
+                        let typeIdentifier = provider.registeredTypeIdentifiers.first ?? "public.jpeg"
+                        result = AssetPickerResult(success: true, error: "", assetId: assetId, assetType: typeIdentifier.mimeType(), data: image)
                         self.onPicked(result)
                     }
                 })
