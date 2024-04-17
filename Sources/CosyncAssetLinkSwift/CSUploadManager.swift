@@ -697,7 +697,9 @@ public class CSUploadManager: NSObject, URLSessionTaskDelegate {
     public func urlSession(_ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64, totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
         DispatchQueue.main.async {
             let upload = session.csActiveUpload
-            upload.uploadCallback!(.assetPogress(totalBytesSent, totalBytesExpectedToSend, upload))
+            if let callback = upload.uploadCallback {
+                callback(.assetPogress(totalBytesSent, totalBytesExpectedToSend, upload))
+            }
             csLogger.info("sent: \(bytesSent) total: \(totalBytesSent) expected: \(totalBytesExpectedToSend)")
         }
     }
