@@ -133,9 +133,20 @@ public struct AssetPicker: UIViewControllerRepresentable {
                     if let err = error {
                         result.error  = err.localizedDescription
                     }
-                    else if let image = object as? UIImage, let assetId =  pickedAsset.assetIdentifier{
-                        
-                        let typeIdentifier = provider.registeredTypeIdentifiers.first ?? "public.jpeg"
+                    else if var image = object as? UIImage, let assetId =  pickedAsset.assetIdentifier{
+                        let typeList = provider.registeredTypeIdentifiers
+                        var typeIdentifier = provider.registeredTypeIdentifiers.first ?? "public.jpeg"
+                        if typeIdentifier != "public.jpeg" && typeIdentifier != "public.png" {
+                            if typeList.contains("public.jpeg") {
+                                typeIdentifier = "public.jpeg"
+                            }
+                        }
+                        if typeIdentifier == "public.jpeg" {
+                            if let jpegData = image.jpegData(compressionQuality: 0.5),
+                               let jpegImage = UIImage(data: jpegData) {
+                                image = jpegImage
+                            }
+                        }
                         result = AssetPickerResult(success: true, error: "", assetId: assetId, assetType: typeIdentifier.mimeType(), data: image)
                         self.onPicked(result)
                     }
