@@ -19,7 +19,7 @@ let package = Package(
         // .package(url: /* package url */, from: "1.0.0"),
         .package(
             url: "https://github.com/realm/realm-swift",
-            from: "10.38.2"
+            from: "10.50.0"
         ),
         .package(
             url: "https://github.com/apple/swift-log.git",
@@ -35,8 +35,7 @@ let package = Package(
         // Targets can depend on other targets in this package and products from dependencies.
         .target(
             name: "CosyncAssetLinkSwift",
-            dependencies: [.product(name: "Realm", package: "realm-swift"),
-                       .product(name: "RealmSwift", package: "realm-swift"),
+            dependencies: [.product(name: "RealmSwift", package: "realm-swift"),
                        .product(name: "Logging", package: "swift-log"),
                        .product(name: "Collections", package: "swift-collections")
             ]),
